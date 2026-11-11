@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panther — эксперимент с геометрическим объёмом</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#111a1c;color:#eef1e9}
+*{box-sizing:border-box}body{margin:0}header{padding:16px 22px;border-bottom:1px solid #344143}
+h1{font-size:20px;margin:0 0 4px}small{color:#a6b5b3}
+main{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:16px;padding:16px;height:calc(100vh - 79px)}
+#scene{width:100%;height:100%;min-height:440px;background:radial-gradient(ellipse,#33443f,#1a2829 70%);border:1px solid #344143;border-radius:12px}
+aside{border:1px solid #344143;border-radius:12px;background:#1a2729;padding:18px;overflow:auto}
+label{display:block;margin:14px 0 5px}input,select{width:100%;accent-color:#e6be72}select{padding:9px;border-radius:8px;background:#10191b;color:#fff;border:1px solid #435356}
+.row{display:flex;justify-content:space-between;gap:8px}output{color:#e6be72}p{font-size:13px;color:#b7cac5;line-height:1.5}
+a{color:#e6be72}button{border:1px solid #455b56;border-radius:8px;padding:9px;background:#283b35;color:#fff;cursor:pointer}
+@media(max-width:850px){main{height:auto;grid-template-columns:1fr}#scene{height:490px}}
+</style></head>
+<body><header><h1>Panther — исследование геометрического объёма</h1>
+<small>Эксперимент: настоящие геометрические высоты + ортографическая проекция. НЕ замена детализированной модели v1.</small></header>
+<main><canvas id="scene"></canvas><aside>
+<h3>Объём и камера</h3>
+<label>Режим</label><select id="mode"><option value="volume">Объёмная 2.5D-геометрия</option><option value="flat">Плоский топ-даун (без толщины)</option></select>
+<label class="row">Наклон камеры <output id="pitchValue">35°</output></label><input id="pitch" type="range" min="0" max="65" value="35">
+<label class="row">Высота геометрии <output id="heightValue">100%</output></label><input id="height" type="range" min="0" max="180" value="100">
+<label class="row">Поворот корпуса <output id="hullValue">0°</output></label><input id="hull" type="range" min="-180" max="180" value="0">
+<label class="row">Поворот башни <output id="turretValue">0°</output></label><input id="turret" type="range" min="-180" max="180" value="0">
+<hr style="border-color:#344143">
+<h3>Освещение</h3>
+<label class="row">Направление света <output id="lightValue">320°</output></label><input id="light" type="range" min="0" max="360" value="320">
+<label class="row">Высота источника <output id="elevValue">55°</output></label><input id="elev" type="range" min="10" max="90" value="55">
+<label class="row">Сила контраста <output id="contrastValue">75%</output></label><input id="contrast" type="range" min="0" max="100" value="75">
+<p>При <b>наклоне камеры 0°</b> мы смотрим строго сверху: высота реальна в модели, но её боковые стенки почти не видны. Увеличь наклон до 40–55°, чтобы увидеть геометрический объём.</p>
+<p><b>Что отличает эту демонстрацию от v2:</b> здесь корпус, башня, гусеницы и ствол имеют заданную высоту; программа строит верхние и боковые грани, вычисляет их освещённость и проецирует на экран. Это не просто градиент на плоской фигуре.</p>
+<button id="reset">Вернуть настройки</button>
+<p><a href="../../index.html">← Все эксперименты</a></p>
+</aside></main>
+<script>
+"use strict";
+const C=document.getElementById("scene"),G=C.getContext("2d");
+const ids=["mode","pitch","height","hull","turret","light","elev","contrast"];
+const s={mode:"volume",pitch:35,height:100,hull:0,turret:0,light:320,elev:55,contrast:75};
+const deg=Math.PI/180;let W=0,H=0,dpr=1;
+function fit(){const r=C.getBoundingClientRect();W=r.width;H=r.height;dpr=Math.min(2,devicePixelRatio||1);C.width=Math.max(1,Math.round(W*dpr));C.height=Math.max(1,Math.round(H*dpr));draw()}
+function rgb(hex,m){const n=parseInt(hex.slice(1),16);return "rgb("+[n>>16,(n>>8)&255,n&255].map(v=>Math.round(Math.max(0,Math.min(255,v*m)))).join(",")+")"}
+function rot(x,y,a){const u=a*deg;return [x*Math.cos(u)-y*Math.sin(u),x*Math.sin(u)+y*Math.cos(u)]}
+function point(x,y,z,angle,offset){const p=rot(x,y,angle);return [p[0]+(offset?offset[0]:0),p[1]+(offset?offset[1]:0),z]}
+function project(v){const pitch=(s.mode==="flat"?0:s.pitch)*deg,ht=s.mode==="flat"?0:s.height/100,sc=Math.min(W/550,H/380)*1.45;return [W*.5+v[0]*sc,H*.57+(v[1]*Math.cos(pitch)-v[2]*ht*Math.sin(pitch))*sc]}
+function depth(v){const p=(s.mode==="flat"?0:s.pitch)*deg;return v[1]*Math.sin(p)+v[2]*Math.cos(p)}
+function shade(normal){const la=s.light*deg,e=s.elev*deg;const light=[Math.cos(la)*Math.cos(e),Math.sin(la)*Math.cos(e),Math.sin(e)];let dot=Math.max(0,normal[0]*light[0]+normal[1]*light[1]+normal[2]*light[2]);return 0.55+(1-s.contrast/100)*.35+dot*.85*(s.contrast/100)}
+function normalOf(a,b,c){const u=b.map((v,i)=>v-a[i]),v=c.map((x,i)=>x-a[i]);const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],m=Math.hypot(...n)||1;return n.map(x=>x/m)}
+const faces=[],details=[];
+function face(vertices,color,normal){faces.push({vertices,color,normal,sort:vertices.reduce((a,v)=>a+depth(v),0)/vertices.length})}
+function extrusion(poly,bottom,top,color,angle=0,offset=[0,0]){
+ let topPts=poly.map(p=>point(p[0],p[1],top,angle,offset)),btmPts=poly.map(p=>point(p[0],p[1],bottom,angle,offset));
+ face(topPts,color,[0,0,1]);
+ for(let i=0;i<poly.length;i++){const j=(i+1)%poly.length;const v=[btmPts[i],btmPts[j],topPts[j],topPts[i]],n=normalOf(v[0],v[1],v[2]);face(v,color,n)}
+}
+function rectangle(x1,y1,x2,y2,z0,z1,color,angle=0,off=[0,0]){extrusion([[x1,y1],[x2,y1],[x2,y2],[x1,y2]],z0,z1,color,angle,off)}
+function detail(poly,z,color,angle=0,offset=[0,0]){details.push({pts:poly.map(p=>point(p[0],p[1],z,angle,offset)),color})}
+function circleDetail(x,y,r,z,color,angle=0,off=[0,0],outline=false){let pts=[];for(let i=0;i<32;i++){const q=i*2*Math.PI/32;pts.push([x+Math.cos(q)*r,y+Math.sin(q)*r])}details.push({pts:pts.map(p=>point(p[0],p[1],z,angle,off)),color,outline})}
+function build(){
+ faces.length=0;details.length=0;
+ const h=s.hull,t=s.hull+s.turret,off=rot(-30,0,h);
+ rectangle(-132,-69,132,-48,2,23,"#383c35",h);rectangle(-132,48,132,69,2,23,"#383c35",h);
+ const hull=[[-135,-44],[-114,-51],[116,-51],[138,-37],[138,37],[116,51],[-114,51],[-135,44]];
+ extrusion(hull,16,39,"#c8a96d",h);
+ detail([[-120,-39],[-75,-39],[-65,-10],[-108,2]],39.4,"#75835b",h);
+ detail([[-54,9],[21,13],[47,33],[-17,37]],39.4,"#8d654e",h);
+ detail([[69,-38],[113,-35],[113,8],[69,8]],39.4,"#637754",h);
+ rectangle(77,-41,119,-14,39,43,"#7b6744",h);
+ rectangle(77,14,119,41,39,43,"#7b6744",h);
+ circleDetail(97,-27,11,43.4,"#39362c",h);
+ circleDetail(97,27,11,43.4,"#39362c",h);
+ const turret=[[-40,-29],[11,-33],[54,-25],[70,-9],[70,9],[54,25],[11,33],[-40,29],[-56,11],[-56,-11]];
+ extrusion(turret,42,66,"#b89a62",t,off);
+ detail([[-33,-24],[-9,-28],[14,4],[-2,25],[-42,12]],66.5,"#75825a",t,off);
+ detail([[20,-22],[51,-19],[58,-8],[37,10]],66.5,"#94644a",t,off);
+ rectangle(-177,-6,-53,6,54,62,"#a28a59",t,off);
+ rectangle(-186,-11,-172,11,53,64,"#4a4c3d",t,off);
+ rectangle(-64,-16,-43,16,50,68,"#a18a59",t,off);
+ circleDetail(32,13,15,67.3,"#514c39",t,off);
+ circleDetail(32,13,10,67.6,"#ddc58a",t,off);
+ rectangle(-10,-22,11,-7,66.5,70,"#c7b178",t,off);
+ // Объём здесь создаётся экструзией геометрии, а не картинкой с градиентом.
+}
+function draw(){
+ if(!W||!H)return;
+ G.setTransform(dpr,0,0,dpr,0,0);G.clearRect(0,0,W,H);
+ G.fillStyle="rgba(222,242,234,.05)";
+ for(let x=0;x<W;x+=42){G.fillRect(x,0,1,H)}for(let y=0;y<H;y+=42){G.fillRect(0,y,W,1)}
+ const shadow=project([Math.cos((s.light+180)*deg)*12,Math.sin((s.light+180)*deg)*12,-2]);
+ G.save();G.translate(shadow[0],shadow[1]);G.rotate(s.hull*deg);G.beginPath();G.ellipse(0,0,Math.min(W/550,H/380)*205,Math.min(W/550,H/380)*78,0,0,Math.PI*2);G.fillStyle="rgba(0,0,0,.25)";G.fill();G.restore();
+ build();faces.sort((a,b)=>a.sort-b.sort);
+ for(const f of faces){if(s.mode==="flat"&&Math.abs(f.normal[2])<.1)continue;const pts=f.vertices.map(project);G.beginPath();pts.forEach((p,i)=>i?G.lineTo(p[0],p[1]):G.moveTo(p[0],p[1]));G.closePath();G.fillStyle=rgb(f.color,shade(f.normal));G.fill();G.lineWidth=1.4;G.strokeStyle="rgba(21,25,22,.75)";G.stroke()}
+ for(const f of details){const pts=f.pts.map(project);G.beginPath();pts.forEach((p,i)=>i?G.lineTo(p[0],p[1]):G.moveTo(p[0],p[1]));G.closePath();G.fillStyle=f.color;G.fill();G.lineWidth=1.1;G.strokeStyle="rgba(22,25,20,.7)";G.stroke()}
+}
+function update(){for(const id of ids){let e=document.getElementById(id);s[id]=e.type==="range"?Number(e.value):e.value;let out=document.getElementById(id+"Value");if(out)out.textContent=e.value+(id==="height"||id==="contrast"?"%":"°")}draw()}
+ids.forEach(id=>document.getElementById(id).addEventListener("input",update));
+document.getElementById("reset").onclick=()=>{Object.assign(s,{mode:"volume",pitch:35,height:100,hull:0,turret:0,light:320,elev:55,contrast:75});ids.forEach(id=>document.getElementById(id).value=s[id]);update()};
+addEventListener("resize",fit);fit();update();
+</script></body></html>
