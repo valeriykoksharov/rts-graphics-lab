@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTS Graphics Lab</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#10191c;color:#eaf1ef;font:16px/1.5 system-ui,Segoe UI,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:50px 22px}h1{font-size:clamp(28px,5vw,46px);margin:0 0 10px}p{color:#b6c7c5}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:30px 0}
+.card{display:flex;flex-direction:column;background:#19282a;border:1px solid #34464a;border-radius:16px;padding:22px;gap:13px}
+.card h2{font-size:21px;margin:0}.card p{margin:0;flex:1}
+a.btn{color:#111;background:#e5bb72;font-weight:700;text-decoration:none;padding:10px 14px;border-radius:10px;text-align:center}
+a.link{color:#e5bb72}.tag{font-size:12px;color:#e7cfa5}small{color:#9dadae}
+</style></head>
+<body><main>
+<small>RTS · ПРОЦЕДУРНАЯ ГРАФИКА · ИССЛЕДОВАНИЕ</small>
+<h1>Panther Graphics Lab</h1>
+<p>Три независимых эксперимента. Версии v1 и v2 сохранены без переписывания кода. Новые технологии проверяем отдельно, прежде чем объединять с детализированной моделью.</p>
+<div class="grid">
+<article class="card"><span class="tag">ЭТАЛОН ГРАФИКИ</span><h2>Panther v1</h2><p>Первая модель с наиболее удачной детальной отрисовкой, LOD, вращением башни и вариантами окраски.</p><a class="btn" href="experiments/v1/index.html">Открыть v1</a></article>
+<article class="card"><span class="tag">ЭКСПЕРИМЕНТ</span><h2>Panther v2</h2><p>Отдельная версия с повреждениями, движением гусениц и базовым псевдоосвещением. Её геометрия отличается от v1.</p><a class="btn" href="experiments/v2/index.html">Открыть v2</a></article>
+<article class="card"><span class="tag">НОВЫЙ ТЕСТ</span><h2>Объём / 2.5D</h2><p>Отдельная упрощённая модель с реальной геометрической высотой корпуса и башни, боковыми гранями, изменяемым углом камеры и направленным освещением.</p><a class="btn" href="experiments/volume-study/index.html">Открыть объёмный тест</a></article>
+</div><p>Все эксперименты работают в браузере без внешних библиотек и серверных вычислений. <a class="link" href="https://github.com/valeriykoksharov/rts-graphics-lab">Исходный код на GitHub</a>.</p>
+</main></body></html>
