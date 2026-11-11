@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panther — Procedural Lab v2</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0f1719;--panel:#182225;--line:#2c3a3e;--text:#edf3f0;--muted:#9cb1ad;
+  --accent:#e7be71;--accent2:#67c8ff;--good:#85d68a;--danger:#ff8b7a;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{padding:18px clamp(16px,4vw,42px);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}
+h1{margin:0;font-size:22px}
+header .meta{color:var(--muted);font-size:13px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:18px;padding:18px;max-width:1650px;margin:auto;min-height:calc(100vh - 78px)}
+.viewer{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;min-height:660px;background:radial-gradient(circle at 45% 38%,#3b5049,#1c2828 58%,#11191b 100%)}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}.viewer:active canvas{cursor:grabbing}
+.pill{position:absolute;left:14px;top:14px;background:rgba(16,24,26,.84);backdrop-filter:blur(8px);border:1px solid var(--line);padding:8px 12px;border-radius:999px;font-size:12px;color:#d6e8e2;display:flex;gap:10px;flex-wrap:wrap}
+.foot{position:absolute;left:14px;right:14px;bottom:14px;font-size:12px;color:#d8e3df;background:rgba(17,24,26,.74);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.panel{display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 115px);overflow:auto;padding-right:4px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px}
+.card h3{margin:0 0 8px;font-size:15px;color:var(--accent)}
+.card p{margin:7px 0;color:var(--muted)}
+label{display:block;margin:8px 0 4px;color:#dfe9e5}
+input[type=range],select,button{width:100%}
+input[type=range]{accent-color:var(--accent)}
+input[type=checkbox]{accent-color:var(--accent);transform:translateY(1px)}
+select,button{background:#11181a;color:var(--text);border:1px solid var(--line);padding:9px 10px;border-radius:10px}
+button{cursor:pointer} button:hover{border-color:#4c6166}
+.row{display:grid;grid-template-columns:1fr 72px;gap:10px;align-items:center}
+.out{font-variant-numeric:tabular-nums;color:var(--accent2);text-align:right}
+.small{font-size:12px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.checks label{margin:0;color:var(--text);font-size:13px}
+.tag{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:#d4dfdb;background:#12191b}
+hr{border:none;border-top:1px solid var(--line);margin:12px 0}
+@media (max-width:1120px){main{grid-template-columns:1fr}.panel{max-height:none}.viewer{min-height:540px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Panther — Procedural Lab v2</h1>
+    <div class="meta">Canvas 2D · процедурная модель · повреждения · освещение · кинематика гусениц</div>
+  </div>
+  <div class="meta">RTS test prototype · всё в одном HTML</div>
+</header>
+<main>
+  <section class="viewer" id="viewer">
+    <canvas id="scene" aria-label="Интерактивная процедурная модель Panther"></canvas>
+    <div class="pill"><span id="modePill">LOD 3 · высокий</span><span id="movePill">Стоп</span><span>FPS: <b id="fps">0</b></span><span>Фигур: <b id="shapeCount">0</b></span></div>
+    <div class="foot">🖱 Перетаскивай сцену · колесо мыши — масштаб · при включённом «Башня к курсору» башня следит за мышью. Для проверки кинематики гусениц используй блок «Ходовая».</div>
+  </section>
+
+  <aside class="panel">
+    <div class="card">
+      <h3>Положение модели</h3>
+      <div class="row"><label for="lod">LOD / детализация</label><div class="out" id="lodOut">3</div></div>
+      <input id="lod" type="range" min="0" max="3" step="1" value="3">
+      <div class="row"><label for="turret">Поворот башни</label><div class="out" id="turretOut">0°</div></div>
+      <input id="turret" type="range" min="-180" max="180" value="0">
+      <div class="row"><label for="hull">Поворот корпуса</label><div class="out" id="hullOut">0°</div></div>
+      <input id="hull" type="range" min="-180" max="180" value="0">
+      <div class="row"><label for="zoom">Масштаб</label><div class="out" id="zoomOut">100%</div></div>
+      <input id="zoom" type="range" min="50" max="180" value="100">
+      <div class="checks" style="margin-top:10px">
+        <label><input id="trackMouse" type="checkbox"> Башня к курсору</label>
+        <label><input id="animate" type="checkbox" checked> Анимация</label>
+        <label><input id="grid" type="checkbox" checked> Сетка</label>
+        <label><input id="axes" type="checkbox"> Оси</label>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <button id="demoTurret">Демо вращения башни</button>
+        <button id="resetView">Сброс вида</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Окраска и визуальный режим</h3>
+      <label for="paint">Окраска</label>
+      <select id="paint">
+        <option value="camo">Трёхцветный камуфляж</option>
+        <option value="sand">Песочный Dunkelgelb</option>
+        <option value="olive">Оливковый</option>
+        <option value="grey">Серый</option>
+      </select>
+      <label for="shadeMode">Режим объёма / света</label>
+      <select id="shadeMode">
+        <option value="flat">Обычный top-down flat</option>
+        <option value="soft">Объёмный · мягкий</option>
+        <option value="hard">Объёмный · выраженный</option>
+        <option value="cel">Объёмный · stylized / cel</option>
+      </select>
+      <p class="small">Режим <b>flat</b> оставляет обычный вид сверху. Остальные — демонстрируют несколько вариантов псевдообъёма без перехода в полноценный 3D.</p>
+    </div>
+
+    <div class="card">
+      <h3>Освещение</h3>
+      <label for="lightPreset">Пресет освещения</label>
+      <select id="lightPreset">
+        <option value="nw">Слева сверху</option>
+        <option value="ne">Справа сверху</option>
+        <option value="sw">Слева снизу</option>
+        <option value="se">Справа снизу</option>
+        <option value="top">Почти верхний мягкий</option>
+        <option value="custom">Пользовательский</option>
+      </select>
+      <div class="row"><label for="lightDir">Направление света</label><div class="out" id="lightDirOut">315°</div></div>
+      <input id="lightDir" type="range" min="0" max="359" value="315">
+      <div class="row"><label for="lightIntensity">Сила света</label><div class="out" id="lightIntensityOut">70%</div></div>
+      <input id="lightIntensity" type="range" min="0" max="100" value="70">
+      <div class="row"><label for="ambient">Фоновый свет</label><div class="out" id="ambientOut">55%</div></div>
+      <input id="ambient" type="range" min="0" max="100" value="55">
+      <div class="row"><label for="shadow">Сила теней</label><div class="out" id="shadowOut">45%</div></div>
+      <input id="shadow" type="range" min="0" max="100" value="45">
+      <div class="checks" style="margin-top:10px">
+        <label><input id="dropShadow" type="checkbox" checked> Падающая тень</label>
+        <label><input id="specular" type="checkbox" checked> Блики</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Ходовая и кинематика гусениц</h3>
+      <p class="small">Правильное общее правило для tracked vehicle: при плавном повороте внутренняя гусеница движется медленнее внешней; при развороте на месте одна гусеница идёт вперёд, другая назад.</p>
+      <label for="drivePreset">Пресет движения</label>
+      <select id="drivePreset">
+        <option value="stop">Стоп</option>
+        <option value="forward">Прямо вперёд</option>
+        <option value="reverse">Назад</option>
+        <option value="left">Плавный поворот влево</option>
+        <option value="right">Плавный поворот вправо</option>
+        <option value="pivotLeft">Разворот на месте влево</option>
+        <option value="pivotRight">Разворот на месте вправо</option>
+        <option value="custom">Пользовательский</option>
+      </select>
+      <div class="row"><label for="leftTrack">Левая гусеница</label><div class="out" id="leftTrackOut">0</div></div>
+      <input id="leftTrack" type="range" min="-100" max="100" value="0">
+      <div class="row"><label for="rightTrack">Правая гусеница</label><div class="out" id="rightTrackOut">0</div></div>
+      <input id="rightTrack" type="range" min="-100" max="100" value="0">
+      <div class="checks" style="margin-top:10px">
+        <label><input id="autoHull" type="checkbox" checked> Корпус вращается от хода</label>
+        <label><input id="showFlow" type="checkbox" checked> Показать направление лент</label>
+      </div>
+      <div class="grid3" style="margin-top:10px">
+        <button data-preset="left">↶ Мягк. влево</button>
+        <button data-preset="forward">↑ Прямо</button>
+        <button data-preset="right">↷ Мягк. вправо</button>
+        <button data-preset="pivotLeft">⟲ Пивот влево</button>
+        <button data-preset="stop">■ Стоп</button>
+        <button data-preset="pivotRight">⟳ Пивот вправо</button>
+      </div>
+      <p class="small" id="driveExplain">Стоп.</p>
+    </div>
+
+    <div class="card">
+      <h3>Повреждения модели</h3>
+      <div class="checks">
+        <label><input id="dmgLeftTrack" type="checkbox"> Левая гусеница</label>
+        <label><input id="dmgRightTrack" type="checkbox"> Правая гусеница</label>
+        <label><input id="dmgGun" type="checkbox"> Ствол / дульная часть</label>
+        <label><input id="dmgTurret" type="checkbox"> Башня</label>
+        <label><input id="dmgHull" type="checkbox"> Корпус</label>
+        <label><input id="dmgEngine" type="checkbox"> Моторный отсек</label>
+        <label><input id="dmgSmoke" type="checkbox"> Дым</label>
+        <label><input id="dmgFire" type="checkbox"> Огонь</label>
+        <label><input id="dmgDestroyed" type="checkbox"> Уничтожен</label>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <button id="presetLightDmg">Слабо повреждён</button>
+        <button id="presetHeavyDmg">Сильно повреждён</button>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <button id="presetWreck">Уничтожен</button>
+        <button id="clearDamage">Очистить</button>
+      </div>
+      <p class="small">Можно включать повреждения по одному или в любой комбинации.</p>
+    </div>
+
+    <div class="card">
+      <h3>Экспорт</h3>
+      <div class="grid2">
+        <button id="savePng">Сохранить PNG</button>
+        <button id="centerModel">Центрировать</button>
+      </div>
+      <p class="small">Файл полностью автономный. Его можно просто открыть двойным кликом в браузере.</p>
+    </div>
+  </aside>
+</main>
+
+<script>
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+const viewer = document.getElementById('viewer');
+const $ = id => document.getElementById(id);
+const detailLabels = ['0 · схематично','1 · низкий','2 · средний','3 · высокий'];
+const S = {
+  lod:3,turret:0,hull:0,zoom:100,paint:'camo',shadeMode:'soft',trackMouse:false,animate:true,grid:true,axes:false,
+  lightPreset:'nw',lightDir:315,lightIntensity:70,ambient:55,shadow:45,dropShadow:true,specular:true,
+  leftTrack:0,rightTrack:0,autoHull:true,showFlow:true,drivePreset:'stop',
+  offsetX:0,offsetY:0,demoTurret:false,
+  damage:{leftTrack:false,rightTrack:false,gun:false,turret:false,hull:false,engine:false,smoke:false,fire:false,destroyed:false}
+};
+let CSSW=0,CSSH=0,dpr=1,scale=1,last=0,lastFps=0,frames=0,fps=0,drag=null,trackPhaseL=0,trackPhaseR=0,shapeCount=0,smokeTick=0;
+function rad(d){return d*Math.PI/180}
+function normAng(a){while(a>180)a-=360;while(a<-180)a+=360;return a}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function lerp(a,b,t){return a+(b-a)*t}
+function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=[...h].map(c=>c+c).join('');const n=parseInt(h,16);return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}}
+function rgba(h,a=1){const c=hexToRgb(h);return `rgba(${c.r},${c.g},${c.b},${a})`}
+function shadeColor(h,m){const c=hexToRgb(h);return `rgb(${clamp(Math.round(c.r*m),0,255)},${clamp(Math.round(c.g*m),0,255)},${clamp(Math.round(c.b*m),0,255)})`}
+function mix(a,b,t){const ca=hexToRgb(a),cb=hexToRgb(b);return `rgb(${Math.round(lerp(ca.r,cb.r,t))},${Math.round(lerp(ca.g,cb.g,t))},${Math.round(lerp(ca.b,cb.b,t))})`}
+function palette(p){
+  if(p==='sand') return {base:'#bea46a',dark:'#8f7547',deep:'#5d4c31',metal:'#232625',accent:'#cec0a0'};
+  if(p==='olive') return {base:'#72855e',dark:'#536147',deep:'#373f2f',metal:'#232625',accent:'#a4b18a'};
+  if(p==='grey') return {base:'#8e8e89',dark:'#66665f',deep:'#464640',metal:'#242627',accent:'#bebfb5'};
+  return {base:'#c0a063',dark:'#8c7447',deep:'#5e4a2f',metal:'#232625',accent:'#d6c28d'};
+}
+function applyLightToFill(base,bounds,normalBias=0.4){
+  if(S.shadeMode==='flat') return base;
+  const inten=S.lightIntensity/100, amb=S.ambient/100, shadow=S.shadow/100;
+  const multBase=amb + inten*0.55;
+  const top=shadeColor(base, clamp(multBase + normalBias*0.35 + inten*0.55, .45, 1.9));
+  const low=shadeColor(base, clamp(multBase - shadow*0.45 - normalBias*0.18, .3, 1.35));
+  const a=rad(S.lightDir), vx=Math.cos(a), vy=Math.sin(a), len=Math.max(bounds.w,bounds.h)*.85;
+  const g=ctx.createLinearGradient(bounds.x-vx*len,bounds.y-vy*len,bounds.x+vx*len,bounds.y+vy*len);
+  if(S.shadeMode==='soft'){g.addColorStop(0,top);g.addColorStop(.55,base);g.addColorStop(1,low);return g}
+  if(S.shadeMode==='hard'){g.addColorStop(0,shadeColor(base,1.45));g.addColorStop(.48,shadeColor(base,1.06));g.addColorStop(.56,shadeColor(base,.9));g.addColorStop(1,shadeColor(base,.55));return g}
+  g.addColorStop(0,shadeColor(base,1.58));g.addColorStop(.33,shadeColor(base,1.14));g.addColorStop(.65,shadeColor(base,.86));g.addColorStop(1,shadeColor(base,.48));return g;
+}
+function overlaySpec(bounds,power=.18){
+  if(S.shadeMode==='flat' || !S.specular) return;
+  const a=rad(S.lightDir), vx=Math.cos(a), vy=Math.sin(a), len=Math.max(bounds.w,bounds.h)*.65;
+  const g=ctx.createLinearGradient(bounds.x-vx*len,bounds.y-vy*len,bounds.x+vx*len,bounds.y+vy*len);
+  if(S.shadeMode==='soft'){g.addColorStop(0,'rgba(255,255,255,0.18)');g.addColorStop(.18,'rgba(255,255,255,0.08)');g.addColorStop(.42,'rgba(255,255,255,0)');}
+  else if(S.shadeMode==='hard'){g.addColorStop(0,'rgba(255,255,255,0.34)');g.addColorStop(.18,'rgba(255,255,255,0.12)');g.addColorStop(.4,'rgba(255,255,255,0)');}
+  else {g.addColorStop(0,'rgba(255,255,255,0.42)');g.addColorStop(.12,'rgba(255,255,255,0.16)');g.addColorStop(.34,'rgba(255,255,255,0)');}
+  ctx.fillStyle=g;ctx.globalAlpha=power;ctx.fill();ctx.globalAlpha=1;
+}
+function fillPolygon(points, fill, stroke, width=2){
+  shapeCount++;
+  ctx.beginPath();
+  points.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+  ctx.closePath();
+  ctx.fillStyle=fill;ctx.fill();
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke()}
+}
+function pathPolygon(points){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();}
+function drawRect(x,y,w,h,r,fill,stroke,width=2){shapeCount++;ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke()}}
+function strokePath(points,stroke,width=2){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.lineCap='round';ctx.stroke()}
+function circle(x,y,r,fill,stroke,width=2){shapeCount++;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke()}}
+function drawGrid(){
+  if(!S.grid) return;
+  const step=40;
+  ctx.save();ctx.strokeStyle='rgba(230,240,236,.08)';ctx.lineWidth=1;
+  for(let x=(S.offsetX%step+step)%step; x<CSSW; x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CSSH);ctx.stroke()}
+  for(let y=(S.offsetY%step+step)%step; y<CSSH; y+=step){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CSSW,y);ctx.stroke()}
+  ctx.restore();
+}
+function resize(){const r=viewer.getBoundingClientRect();CSSW=r.width;CSSH=r.height;dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.round(CSSW*dpr);canvas.height=Math.round(CSSH*dpr);updateScale()}
+function updateScale(){scale=Math.min(CSSW/620,CSSH/430)*S.zoom/100}
+window.addEventListener('resize',resize); resize();
+function updatePresetLight(){
+  const map={nw:315,ne:45,sw:225,se:135,top:290,custom:S.lightDir};
+  if(S.lightPreset!=='custom') S.lightDir=map[S.lightPreset] ?? 315;
+  if(S.lightPreset==='top'){S.lightIntensity=58;S.ambient=68;S.shadow=26}
+  else if(S.lightPreset!=='custom'){S.lightIntensity=70;S.ambient=55;S.shadow=45}
+}
+function applyDrivePreset(name){
+  S.drivePreset=name;
+  const presets={stop:[0,0],forward:[70,70],reverse:[-55,-55],left:[28,74],right:[74,28],pivotLeft:[-55,55],pivotRight:[55,-55]};
+  if(name!=='custom'){const p=presets[name]||[0,0];S.leftTrack=p[0];S.rightTrack=p[1];}
+  sync();
+}
+function classifyDrive(l,r){
+  const absL=Math.abs(l), absR=Math.abs(r);
+  if(absL<2 && absR<2) return ['Стоп','Обе гусеницы стоят.'];
+  if(Math.sign(l)===Math.sign(r)){
+    if(Math.abs(l-r)<8) return [l>0?'Прямо вперёд':'Назад', l>0?'Обе гусеницы движутся с близкой скоростью вперёд.':'Обе гусеницы движутся назад.'];
+    if(r>l) return [l>=0?'Поворот влево':'Поворот назад-влево','Для левого поворота внутренняя левая гусеница идёт медленнее правой.'];
+    return [r>=0?'Поворот вправо':'Поворот назад-вправо','Для правого поворота внутренняя правая гусеница идёт медленнее левой.'];
+  }
+  if(l<0 && r>0) return ['Разворот на месте влево','Левая гусеница идёт назад, правая вперёд: контрвращение для очень резкого поворота / pivot turn.'];
+  if(l>0 && r<0) return ['Разворот на месте вправо','Правая гусеница идёт назад, левая вперёд: контрвращение для разворота на месте.'];
+  return ['Смешанное движение','Нестандартная комбинация скоростей гусениц.'];
+}
+function sync(){
+  $('lodOut').textContent=detailLabels[S.lod]; $('turretOut').textContent=`${Math.round(S.turret)}°`; $('hullOut').textContent=`${Math.round(S.hull)}°`; $('zoomOut').textContent=`${S.zoom}%`;
+  $('lightDirOut').textContent=`${Math.round(S.lightDir)}°`; $('lightIntensityOut').textContent=`${S.lightIntensity}%`; $('ambientOut').textContent=`${S.ambient}%`; $('shadowOut').textContent=`${S.shadow}%`;
+  $('leftTrackOut').textContent=S.leftTrack; $('rightTrackOut').textContent=S.rightTrack;
+  $('modePill').textContent=`LOD ${S.lod} · ${detailLabels[S.lod].split('·')[1].trim()} · ${S.shadeMode}`;
+  const [title,desc]=classifyDrive(S.leftTrack,S.rightTrack); $('movePill').textContent=title; $('driveExplain').textContent=desc;
+  $('drivePreset').value=S.drivePreset; $('paint').value=S.paint; $('shadeMode').value=S.shadeMode; $('lightPreset').value=S.lightPreset;
+  updateScale();
+}
+['lod','turret','hull','zoom','lightDir','lightIntensity','ambient','shadow','leftTrack','rightTrack'].forEach(id=>$(id).addEventListener('input',e=>{
+  const val=Number(e.target.value); if(['lod'].includes(id)) S[id]=val; else S[id]=val;
+  if(id==='leftTrack' || id==='rightTrack') S.drivePreset='custom';
+  if(id==='lightDir' || id==='lightIntensity' || id==='ambient' || id==='shadow') S.lightPreset='custom';
+  sync();
+}));
+['paint','shadeMode','lightPreset','drivePreset'].forEach(id=>$(id).addEventListener('change',e=>{
+  S[id]=e.target.value;
+  if(id==='lightPreset') updatePresetLight();
+  if(id==='drivePreset') applyDrivePreset(e.target.value);
+  sync();
+}));
+['trackMouse','animate','grid','axes','dropShadow','specular','autoHull','showFlow'].forEach(id=>$(id).addEventListener('change',e=>{S[id]=e.target.checked;sync()}));
+const dmgMap={dmgLeftTrack:'leftTrack',dmgRightTrack:'rightTrack',dmgGun:'gun',dmgTurret:'turret',dmgHull:'hull',dmgEngine:'engine',dmgSmoke:'smoke',dmgFire:'fire',dmgDestroyed:'destroyed'};
+Object.entries(dmgMap).forEach(([id,key])=>$(id).addEventListener('change',e=>{S.damage[key]=e.target.checked;sync()}));
+function setDamagePreset(name){
+  Object.keys(S.damage).forEach(k=>S.damage[k]=false);
+  if(name==='light'){Object.assign(S.damage,{leftTrack:true,hull:true})}
+  else if(name==='heavy'){Object.assign(S.damage,{leftTrack:true,rightTrack:true,gun:true,turret:true,hull:true,engine:true,smoke:true})}
+  else if(name==='wreck'){Object.assign(S.damage,{leftTrack:true,rightTrack:true,gun:true,turret:true,hull:true,engine:true,smoke:true,fire:true,destroyed:true})}
+  Object.entries(dmgMap).forEach(([id,key])=>$(id).checked=S.damage[key]);
+}
+$('presetLightDmg').onclick=()=>{setDamagePreset('light');sync()};
+$('presetHeavyDmg').onclick=()=>{setDamagePreset('heavy');sync()};
+$('presetWreck').onclick=()=>{setDamagePreset('wreck');sync()};
+$('clearDamage').onclick=()=>{setDamagePreset('clear');sync()};
+$('demoTurret').onclick=()=>{S.demoTurret=!S.demoTurret; $('demoTurret').textContent=S.demoTurret?'Остановить демо башни':'Демо вращения башни'};
+$('resetView').onclick=()=>{Object.assign(S,{lod:3,turret:0,hull:0,zoom:100,paint:'camo',shadeMode:'soft',trackMouse:false,animate:true,grid:true,axes:false,offsetX:0,offsetY:0,lightPreset:'nw',lightDir:315,lightIntensity:70,ambient:55,shadow:45,dropShadow:true,specular:true,leftTrack:0,rightTrack:0,autoHull:true,showFlow:true,drivePreset:'stop'});Object.keys(S.damage).forEach(k=>S.damage[k]=false);document.querySelectorAll('input[type=checkbox]').forEach(el=>{ if(el.id in dmgMap || ['trackMouse','animate','grid','axes','dropShadow','specular','autoHull','showFlow'].includes(el.id)) el.checked=(el.id in dmgMap)?false:S[el.id]; }); $('demoTurret').textContent='Демо вращения башни'; sync();};
+$('centerModel').onclick=()=>{S.offsetX=0;S.offsetY=0;sync()};
+$('savePng').onclick=()=>{const a=document.createElement('a');a.download='panther_procedural_v2.png';a.href=canvas.toDataURL('image/png');a.click()};
+document.querySelectorAll('[data-preset]').forEach(btn=>btn.onclick=()=>applyDrivePreset(btn.dataset.preset));
+canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,ox:S.offsetX,oy:S.offsetY};canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{
+  if(drag){S.offsetX=drag.ox+e.clientX-drag.x; S.offsetY=drag.oy+e.clientY-drag.y;}
+  else if(S.trackMouse){const box=canvas.getBoundingClientRect(); const x=(e.clientX-box.left-CSSW/2-S.offsetX)/scale; const y=(e.clientY-box.top-CSSH/2-S.offsetY)/scale; const a=(Math.atan2(y,x)*180/Math.PI+180-S.hull+540)%360-180; S.turret=Math.round(a); $('turret').value=S.turret; sync();}
+});
+['pointerup','pointercancel','pointerleave'].forEach(ev=>canvas.addEventListener(ev,()=>drag=null));
+canvas.addEventListener('wheel',e=>{e.preventDefault();S.zoom=clamp(S.zoom + (e.deltaY<0?6:-6),50,180);$('zoom').value=S.zoom;sync()},{passive:false});
+function drawFlowArrow(x,y,dir,amount){ if(!S.showFlow || Math.abs(amount)<6) return; ctx.save(); ctx.translate(x,y); const s=Math.sign(amount); ctx.rotate(s>0?0:Math.PI); ctx.fillStyle='rgba(111,222,255,.9)'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-8,-4.5); ctx.lineTo(-8,4.5); ctx.closePath(); ctx.fill(); ctx.restore(); }
+function drawTrack(y, phase, speed, damaged, pal){
+  const x=-145,w=290,h=21; const bounds={x:x+w/2,y,w,h};
+  drawRect(x,y-h/2,w,h,4,applyLightToFill('#2c2d2d',bounds,-0.2),shadeColor('#111',1.2),2);
+  drawRect(x+8,y-h/2+2,w-16,h-4,3,applyLightToFill('#4a4a48',bounds,-0.15),null,1);
+  ctx.save(); ctx.beginPath(); ctx.rect(x+6,y-h/2+2,w-12,h-4); ctx.clip();
+  const step=16, off=(phase%step+step)%step; for(let xx=x-20+off; xx<x+w+24; xx+=step){ctx.strokeStyle=damaged&&Math.floor((xx-x)/step)%7===2?'#a35a45':'#171818'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(xx,y-h/2+2); ctx.lineTo(xx+6,y+h/2-2); ctx.stroke(); if(S.lod>1){ctx.beginPath(); ctx.moveTo(xx+6,y-h/2+2); ctx.lineTo(xx+12,y+h/2-2); ctx.stroke();}}
+  ctx.restore();
+  if(damaged){
+    ctx.strokeStyle='#d9a07c'; ctx.lineWidth=3; strokePath([[x+46,y],[x+68,y-9],[x+86,y+7]],'#d38a67',3);
+    ctx.strokeStyle='#222'; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(x+92,y-h/2+3); ctx.lineTo(x+118,y-h/2+3); ctx.stroke();
+    ctx.fillStyle='rgba(42,42,42,.45)'; ctx.fillRect(x+84,y-h/2+1,42,h-2);
+  }
+  if(S.lod>0){for(const xx of [-118,-72,-26,20,66,112]) circle(xx,y,2.2,pal.deep,null)}
+  drawFlowArrow(-155,y,0,speed); drawFlowArrow(155,y,0,speed);
+}
+function drawBody(pal){
+  const hull=[[-128,-58],[-96,-58],[-62,-42],[15,-42],[62,-58],[118,-58],[126,-52],[126,52],[118,58],[62,58],[15,42],[-62,42],[-96,58],[-128,58],[-138,44],[-138,-44]];
+  const hullBounds={x:-8,y:0,w:276,h:116};
+  pathPolygon(hull); ctx.fillStyle=applyLightToFill(pal.base,hullBounds,0.3); ctx.fill(); ctx.strokeStyle=shadeColor(pal.deep,.9); ctx.lineWidth=2; ctx.stroke();
+  if(S.paint==='camo'){
+    ctx.save(); pathPolygon(hull); ctx.clip();
+    const blobs=[[-78,-20,28,'#728354'],[-37,13,26,'#9c7050'],[2,-8,31,'#d1b276'],[41,16,23,'#9a7051'],[74,-22,30,'#6c7850']];
+    blobs.forEach(([x,y,r,c])=>{ctx.beginPath(); ctx.moveTo(x-r*.9,y); for(let i=0;i<7;i++){const a=i/7*Math.PI*2; const rr=r*(.78+((i%2)?0.28:0)); ctx.quadraticCurveTo(x+Math.cos(a-.22)*rr,y+Math.sin(a-.22)*rr,x+Math.cos(a)*rr,y+Math.sin(a)*rr)} ctx.fillStyle=c; ctx.fill();});
+    ctx.restore();
+  }
+  if(S.lod>0){
+    drawRect(-130,-72,264,10,2,applyLightToFill('#252727',{x:0,y:-67,w:264,h:10},-0.2),null,1);
+    drawRect(-130,62,264,10,2,applyLightToFill('#252727',{x:0,y:67,w:264,h:10},-0.2),null,1);
+    drawRect(-137,-27,16,54,3,applyLightToFill(pal.dark,{x:-129,y:0,w:16,h:54},0.1),shadeColor(pal.deep,.9),2);
+    drawRect(-137,-72,20,12,3,applyLightToFill(pal.dark,{x:-127,y:-66,w:20,h:12},0.08),shadeColor(pal.deep,.9),2);
+    drawRect(-137,60,20,12,3,applyLightToFill(pal.dark,{x:-127,y:66,w:20,h:12},0.08),shadeColor(pal.deep,.9),2);
+    drawRect(52,-72,78,12,2,applyLightToFill(pal.dark,{x:91,y:-66,w:78,h:12},0.08),null,1);
+    drawRect(52,60,78,12,2,applyLightToFill(pal.dark,{x:91,y:66,w:78,h:12},0.08),null,1);
+  }
+  if(S.lod>1){
+    circle(-82,0,13,applyLightToFill(pal.base,{x:-82,y:0,w:26,h:26},0.15),shadeColor(pal.deep,1),2);
+    drawRect(-5,-36,22,72,4,applyLightToFill(mix(pal.base,pal.deep,.2),{x:6,y:0,w:22,h:72},0.2),shadeColor(pal.deep,.9),2);
+    drawRect(66,-35,32,26,4,applyLightToFill('#584c35',{x:82,y:-22,w:32,h:26},0.1),shadeColor('#2b261d',1),2);
+    drawRect(66,9,32,26,4,applyLightToFill('#584c35',{x:82,y:22,w:32,h:26},0.1),shadeColor('#2b261d',1),2);
+    circle(99,-23,15,null,'#251f16',2.2); circle(99,23,15,null,'#251f16',2.2);
+    for(const p of [[61,-47],[85,-47],[109,-47],[61,47],[85,47],[109,47],[-93,-51],[-62,-35],[-58,28],[-91,44]]) circle(...p,2.3,pal.deep,null);
+  }
+  if(S.lod>2){
+    strokePath([[38,-66],[72,-66],[103,-66]],'#3b3e3e',3);
+    strokePath([[38,66],[72,66],[103,66]],'#3b3e3e',3);
+    strokePath([[-8,-67],[9,-67],[34,-67]],'#6a7057',3);
+    strokePath([[-8,67],[9,67],[34,67]],'#6a7057',3);
+    strokePath([[-67,-32],[-24,-41],[23,-42]],rgba('#000',.22),2);
+    strokePath([[-67,32],[-24,41],[23,42]],rgba('#000',.22),2);
+  }
+  if(S.shadeMode!=='flat'){
+    pathPolygon(hull); overlaySpec(hullBounds,S.shadeMode==='soft'?0.12:0.18);
+  }
+}
+function drawTurret(pal){
+  ctx.save(); ctx.translate(-18,0); ctx.rotate(rad(S.turret));
+  const turret=[[-8,-38],[48,-34],[72,-14],[72,17],[50,38],[-8,37],[-30,17],[-34,-11],[-20,-31]];
+  const bounds={x:18,y:0,w:108,h:76};
+  pathPolygon(turret); ctx.fillStyle=applyLightToFill(mix(pal.base,pal.dark,.05),bounds,0.35); ctx.fill(); ctx.strokeStyle=shadeColor(pal.deep,.95); ctx.lineWidth=2; ctx.stroke();
+  if(S.paint==='camo'){
+    ctx.save(); pathPolygon(turret); ctx.clip();
+    for(const [x,y,r,c] of [[0,-10,18,'#947051'],[27,8,20,'#718053'],[42,-14,18,'#d2b071']]){ctx.beginPath(); ctx.ellipse(x,y,r*1.2,r,.2,0,Math.PI*2); ctx.fillStyle=c; ctx.fill();}
+    ctx.restore();
+  }
+  const mBounds={x:-70,y:0,w:118,h:12};
+  const gunColor=applyLightToFill(mix(pal.base,pal.accent,.15),mBounds,0.05);
+  const muzzleColor=applyLightToFill(mix(pal.base,pal.deep,.1),{x:-115,y:0,w:16,h:14},0.02);
+  ctx.fillStyle=gunColor; ctx.fillRect(-121,-5,111,10); ctx.strokeStyle=shadeColor(pal.deep,.95); ctx.lineWidth=2; ctx.strokeRect(-121,-5,111,10);
+  ctx.fillStyle=applyLightToFill(mix(pal.base,pal.dark,.1),{x:-13,y:0,w:18,h:16},0.08); ctx.fillRect(-13,-8,18,16); ctx.strokeRect(-13,-8,18,16);
+  if(!S.damage.gun && !S.damage.destroyed){ctx.fillStyle=muzzleColor; ctx.fillRect(-134,-7,14,14); ctx.strokeRect(-134,-7,14,14)}
+  else {
+    strokePath([[-120,0],[-95,-2],[-82,-10]],'#2b2b2b',5);
+    strokePath([[-96,4],[-86,12]],'#d79c73',3);
+  }
+  if(S.lod>0){ drawRect(-2,-9,21,18,4,applyLightToFill(pal.base,{x:8,y:0,w:21,h:18},0.12),shadeColor(pal.deep,1),2); }
+  if(S.lod>1){ circle(29,17,17,null,shadeColor(pal.deep,.95),2); circle(29,17,9,null,shadeColor(pal.deep,.95),2); drawRect(4,-22,21,13,3,applyLightToFill(mix(pal.base,pal.accent,.18),{x:14,y:-15,w:21,h:13},0.08),shadeColor(pal.deep,.95),2); }
+  if(S.lod>2){ for(const p of [[56,-8],[58,8],[16,28],[-11,24],[-20,-18]]) circle(...p,2,pal.deep,null); strokePath([[34,-28],[52,-18],[61,-2]],rgba('#000',.18),2); }
+  if(S.shadeMode!=='flat'){ pathPolygon(turret); overlaySpec(bounds,S.shadeMode==='soft'?0.12:0.16); }
+  if(S.damage.turret || S.damage.destroyed){ damageBursts([[18,-8],[45,5]],22, '#2f2a29', '#c88d62'); }
+  ctx.restore();
+}
+function damageBursts(points,r=18,smoke='#332e2d',mark='#d18d66'){
+  points.forEach(([x,y],i)=>{ctx.save(); ctx.translate(x,y); ctx.rotate(i*.7); ctx.fillStyle=rgba(smoke,.42); ctx.beginPath(); ctx.arc(0,0,r*.88,0,Math.PI*2); ctx.fill(); ctx.strokeStyle=rgba(mark,.75); ctx.lineWidth=2; for(let a=0;a<6;a++){ctx.beginPath(); ctx.moveTo(Math.cos(a)*4,Math.sin(a)*4); ctx.lineTo(Math.cos(a)*(r-2),Math.sin(a)*(r-2)); ctx.stroke()} ctx.restore();})
+}
+function drawDamageGlobal(){
+  if(S.damage.hull){ damageBursts([[-55,-10],[-18,21]],16,'#2f2d2b','#c68b64'); }
+  if(S.damage.engine){ damageBursts([[87,-19],[94,18]],18,'#28231d','#d77d4d'); }
+  if(S.damage.destroyed){
+    ctx.fillStyle='rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(0,0,145,86,0,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(64,35,23,.88)'; ctx.lineWidth=3; strokePath([[-62,-24],[-35,-6],[-10,-18],[15,0]],'rgba(70,45,34,.9)',3);
+  }
+  if(S.damage.smoke || S.damage.fire || S.damage.destroyed){ drawSmokeAndFire(); }
+}
+function drawSmokeAndFire(){
+  const baseX=90, baseY=-8; smokeTick += .03;
+  for(let i=0;i<7;i++){
+    const px=baseX + Math.sin(smokeTick+i*.8)*5 - i*2;
+    const py=baseY - i*18 + Math.cos(smokeTick*.8+i)*4;
+    const rr=12+i*4;
+    const alpha=(S.damage.destroyed?.18:.12)+(6-i)*.02;
+    const col=i<2 && S.damage.fire? 'rgba(255,150,56,'+alpha+')' : 'rgba(50,52,54,'+alpha+')';
+    ctx.beginPath(); ctx.arc(px,py,rr,0,Math.PI*2); ctx.fillStyle=col; ctx.fill();
+  }
+  if(S.damage.fire || S.damage.destroyed){
+    ctx.save(); ctx.translate(86,-4); for(let i=0;i<3;i++){ctx.beginPath(); ctx.moveTo(-4+i*8,9); ctx.quadraticCurveTo(2+i*7,-6,-2+i*8,-16); ctx.quadraticCurveTo(7+i*7,-8,6+i*8,8); ctx.fillStyle=['rgba(255,162,66,.9)','rgba(255,116,42,.84)','rgba(255,208,111,.76)'][i]; ctx.fill()} ctx.restore();
+  }
+}
+function drawDropShadow(){
+  if(!S.dropShadow || S.shadow<=0) return;
+  const a=rad(S.lightDir+180); const dx=Math.cos(a)*(10+S.shadow*.25), dy=Math.sin(a)*(10+S.shadow*.25);
+  ctx.save(); ctx.translate(dx,dy); ctx.rotate(rad(S.hull)); ctx.scale(1.02,1.02); ctx.fillStyle=`rgba(0,0,0,${0.10+S.shadow/260})`;
+  ctx.beginPath(); ctx.ellipse(0,0,152,91,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function drawAxes(){if(!S.axes) return; strokePath([[-18,0],[18,0]],'#ff6b59',1.5); strokePath([[0,-18],[0,18]],'#6bc8ff',1.5); circle(0,0,2,'#fff',null)}
+function updateSimulation(dt){
+  if(S.demoTurret) {S.turret=normAng(S.turret + dt*0.035); $('turret').value=Math.round(S.turret);}
+  if(S.animate){ trackPhaseL += S.leftTrack*dt*0.07; trackPhaseR += S.rightTrack*dt*0.07; }
+  if(S.autoHull && (Math.abs(S.leftTrack)>1 || Math.abs(S.rightTrack)>1)){
+    const delta=(S.rightTrack-S.leftTrack)*dt*0.023; S.hull=normAng(S.hull+delta); $('hull').value=Math.round(S.hull);
+  }
+}
+function render(t){
+  const dt=last? (t-last):16; last=t; updateSimulation(dt);
+  frames++; if(t-lastFps>500){fps=Math.round(frames*1000/(t-lastFps)); frames=0; lastFps=t; $('fps').textContent=fps;}
+  ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,CSSW,CSSH); drawGrid();
+  ctx.save(); ctx.translate(CSSW/2+S.offsetX,CSSH/2+S.offsetY); ctx.scale(scale,scale);
+  drawDropShadow();
+  ctx.rotate(rad(S.hull)); shapeCount=0;
+  const pal=palette(S.paint);
+  drawTrack(-66,trackPhaseL,S.leftTrack,S.damage.leftTrack||S.damage.destroyed,pal);
+  drawTrack(66,trackPhaseR,S.rightTrack,S.damage.rightTrack||S.damage.destroyed,pal);
+  drawBody(pal);
+  drawTurret(pal);
+  drawDamageGlobal();
+  drawAxes();
+  ctx.restore();
+  $('shapeCount').textContent=shapeCount;
+  syncLite();
+  requestAnimationFrame(render);
+}
+function syncLite(){ $('turretOut').textContent=`${Math.round(S.turret)}°`; $('hullOut').textContent=`${Math.round(S.hull)}°`; $('fps').textContent=fps; }
+updatePresetLight(); applyDrivePreset('stop'); Object.entries(dmgMap).forEach(([id])=>$(id).checked=false);
+['trackMouse','animate','grid','axes','dropShadow','specular','autoHull','showFlow'].forEach(id=>$(id).checked=S[id]);
+sync(); requestAnimationFrame(render);
+</script>
+</body>
+</html>
