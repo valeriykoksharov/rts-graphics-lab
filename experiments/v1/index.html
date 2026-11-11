@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panther — процедурная 2D-модель · RTS Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#111a1c;--panel:#1c2729;--line:#344447;--text:#eaf0ed;--muted:#a2b3b0;--gold:#e9be71}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--text)}
+header{padding:21px clamp(16px,4vw,44px);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;align-items:center}h1{font-size:21px;margin:0;font-weight:700}header small{color:var(--muted)}
+main{display:grid;grid-template-columns:minmax(0,1fr) 315px;gap:18px;padding:18px;max-width:1600px;margin:auto;min-height:calc(100vh - 90px)}
+.viewer{position:relative;min-height:550px;background:radial-gradient(circle at 45% 40%,#374b43,#1a2826 70%);border:1px solid var(--line);border-radius:15px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:grab}.viewer:active canvas{cursor:grabbing}
+.pill{position:absolute;top:15px;left:15px;background:#111a1cbe;border:1px solid #50635c;border-radius:9px;padding:8px 12px;font-size:12px;color:#dce5dc;pointer-events:none}
+.foot{position:absolute;bottom:13px;left:16px;color:#b7c4be;font-size:12px;pointer-events:none;text-shadow:0 1px 3px #000}
+.side{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:20px;align-self:stretch}h2{margin:0 0 20px;font-size:18px}h3{font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#b9c8c1;margin:22px 0 10px}label{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}label span:last-child{color:var(--gold);font-variant-numeric:tabular-nums}input[type=range]{width:100%;accent-color:#e0b572;cursor:pointer}select{width:100%;padding:10px;background:#101c1d;color:var(--text);border:1px solid var(--line);border-radius:8px}button{background:#293b37;color:#fff;border:1px solid #496056;border-radius:9px;padding:10px 13px;cursor:pointer;font:inherit}button:hover{background:#355047}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:20px}button.wide{grid-column:1/-1}.switch{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}.switch input{accent-color:#e0b572;width:19px;height:19px}.note{color:var(--muted);font-size:12.5px;margin:18px 0 0;line-height:1.6}.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}.stat{background:#152023;border-radius:8px;padding:9px}.stat b{display:block;font-size:18px;color:#e6c58a}.stat span{font-size:11px;color:var(--muted)}
+@media(max-width:850px){main{grid-template-columns:1fr}.viewer{min-height:410px}.side{padding:17px}}
+</style>
+</head>
+<body>
+<header><div><h1>Panther Ausf. G <span style="color:#e9be71">/ Procedural Lab</span></h1><small>Эксперимент: модель полностью построена кодом Canvas 2D · без PNG и SVG-ассетов</small></div><small>RTS / Прототип 01</small></header>
+<main>
+<section class="viewer" id="viewer"><canvas id="scene" aria-label="Процедурная модель Panther сверху"></canvas><div class="pill" id="mode">LOD 3 · Высокий</div><div class="foot">🖱 Перетаскивай для изменения положения · колесо — масштаб · мышь по танку — направление башни (если включено)</div></section>
+<aside class="side"><h2>Настройки модели</h2>
+<h3>Геометрия</h3>
+<label for="lod">Уровень детализации <span id="lodOut">3 · Высокий</span></label><input id="lod" type="range" min="0" max="3" step="1" value="3">
+<label for="turret">Поворот башни <span id="turretOut">0°</span></label><input id="turret" type="range" min="-180" max="180" value="0">
+<label for="hull">Поворот корпуса <span id="hullOut">0°</span></label><input id="hull" type="range" min="-180" max="180" value="0">
+<label for="zoom">Масштаб <span id="zoomOut">100%</span></label><input id="zoom" type="range" min="35" max="200" value="100">
+<h3>Окраска и среда</h3>
+<label for="paint">Окраска</label><select id="paint"><option value="camo">Трёхцветный камуфляж</option><option value="sand">Dunkelgelb · песочный</option><option value="olive">Оливковый</option><option value="grey">Серый</option></select>
+<div class="switch"><span>Следить башней за мышью</span><input id="track" type="checkbox"></div>
+<div class="switch"><span>Анимация гусениц</span><input id="animate" type="checkbox" checked></div>
+<div class="switch"><span>Сетка и разметка</span><input id="grid" type="checkbox" checked></div>
+<div class="switch"><span>Показать оси поворота</span><input id="axes" type="checkbox"></div>
+<div class="actions"><button id="reset">Сбросить вид</button><button id="snapshot">Снимок PNG</button><button class="wide" id="demo">Демонстрация поворота башни</button></div>
+<div class="stats"><div class="stat"><b id="shapeCount">—</b><span>нарисовано контуров</span></div><div class="stat"><b id="fps">—</b><span>кадров/сек</span></div></div>
+<p class="note">Это <strong>реальная программная модель</strong>. Каждый слой, контур, гусеничный трак, люк и решётка создаются JavaScript-инструкциями. Уровни детализации включают и отключают геометрию, а не заменяют картинку. Для игры такую модель можно позже кэшировать в текстуры.</p>
+</aside>
+</main>
+<script>
+'use strict';
+const canvas=document.querySelector('#scene'),viewer=document.querySelector('#viewer'),ctx=canvas.getContext('2d');
+const el=id=>document.getElementById(id);
+const S={lod:3,turret:0,hull:0,zoom:100,paint:'camo',track:false,animate:true,grid:true,axes:false,offsetX:0,offsetY:0,frame:0,demo:false};
+const P={ink:'#242520',sand:'#d9b675',highlight:'#f3d094',olive:'#6a7650',brown:'#966448',dark:'#313633',steel:'#626865',shadow:'#433b2c'};
+let count=0, fps=60, frames=0, lastFps=performance.now(),last=performance.now();
+const rad=x=>x*Math.PI/180;const col=(name)=>({camo:P.sand,sand:'#e0be81',olive:'#83916b',grey:'#848784'})[name]||P.sand;
+function path(pts,fill,stroke=P.ink,w=2){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=w;ctx.stroke()}count++}
+function rect(x,y,w,h,fill,stroke=P.ink,sw=2){ctx.beginPath();ctx.rect(x,y,w,h);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw;ctx.stroke()}count++}
+function round(x,y,w,h,r,fill,stroke=P.ink,sw=2){ctx.beginPath();ctx.roundRect(x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw;ctx.stroke()}count++}
+function circle(x,y,r,fill,stroke=P.ink,sw=2){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw;ctx.stroke()}count++}
+function line(pts,color=P.ink,w=2){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.strokeStyle=color;ctx.lineWidth=w;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke();count++}
+function camoClip(shape){if(S.paint!=='camo')return;ctx.save();shape();ctx.clip();const patches=[[-170,-54,42,31,P.olive],[-130,30,54,33,P.brown],[-90,-23,53,31,P.brown],[-37,63,66,33,P.olive],[3,-66,56,26,P.olive],[58,-15,61,38,P.brown],[100,63,58,30,P.olive],[165,-72,50,33,P.brown],[-180,80,35,32,P.brown],[145,10,31,22,P.olive],[-44,-88,30,29,P.brown],[-135,-80,40,25,P.olive]];
+for(const [x,y,w,h,color] of patches){const d=Math.sin(x*0.13)*12;path([[x-w,y-h/2],[x-w*.4,y-h],[x+w*.35,y-h*.76],[x+w,y-h*.17],[x+w*.73,y+h*.55],[x-w*.25,y+h],[x-w*1.1,y+h*.38]],color,null)}ctx.restore()}
+function camoTurret(){if(S.paint!=='camo')return;ctx.save();ctx.beginPath();ctx.moveTo(-69,-48);ctx.lineTo(-32,-72);ctx.lineTo(55,-75);ctx.lineTo(101,-40);ctx.lineTo(112,24);ctx.lineTo(61,65);ctx.lineTo(-37,70);ctx.lineTo(-75,45);ctx.closePath();ctx.clip();path([[-70,-55],[-26,-76],[2,-58],[-33,-19],[-71,-11]],P.olive,null);path([[28,-75],[73,-69],[107,-40],[83,-13],[47,-37]],P.brown,null);path([[-66,18],[-30,8],[5,43],[-27,76],[-75,53]],P.brown,null);path([[45,10],[105,-4],[115,24],[71,69],[35,53]],P.olive,null);ctx.restore()}
+function tracks(t){for(let sign of [-1,1]){const y=sign*104;round(-206,y-14,415,28,9,'#282c2a','#111715',2.6);const offset=S.animate?Math.floor(t/90)%16:0;for(let x=-201;x<204;x+=12){const px=x+((offset%12+12)%12);if(px>202)continue;round(px,y-12,10,24,2,'#535955','#171c1a',1.6);if(S.lod>=2)line([[px+2,y-8],[px+2,y+8]],'#82857c',.9)}if(S.lod>=1){round(-200,y-7,396,14,4,'#3b403b',null);for(let x=-185;x<190;x+=22)circle(x,y,3,'#727973','#1c2420',1)}}}
+function body(t){const base=col(S.paint);tracks(t);
+path([[-211,-88],[-191,-104],[198,-104],[214,-84],[215,84],[196,103],[-190,103],[-211,86]],base,P.ink,3);
+camoClip(()=>{ctx.beginPath();ctx.moveTo(-211,-88);ctx.lineTo(-191,-104);ctx.lineTo(198,-104);ctx.lineTo(214,-84);ctx.lineTo(215,84);ctx.lineTo(196,103);ctx.lineTo(-190,103);ctx.lineTo(-211,86);ctx.closePath()});
+path([[-208,-65],[-157,-65],[-119,-91],[-119,-72],[-146,-49],[-208,-49]],null,P.ink,1.7);path([[-208,65],[-157,65],[-119,91],[-119,72],[-146,49],[-208,49]],null,P.ink,1.7);
+line([[-129,-102],[-129,102]],P.ink,1.7);line([[98,-100],[98,100]],P.ink,1.7);
+round(-212,-96,47,37,3,base,P.ink,2.3);round(-212,59,47,37,3,base,P.ink,2.3);
+if(S.lod>=1){line([[-209,-77],[-167,-77]],P.shadow,1.4);line([[-209,77],[-167,77]],P.shadow,1.4);rect(-206,-63,40,5,P.highlight,P.ink,1);rect(-206,59,40,5,P.highlight,P.ink,1)}
+if(S.lod>=1){circle(-143,-22,17,base,P.ink,2.2);rect(-167,-25,14,6,P.steel,P.ink,1.2);round(-109,-74,14,10,3,base);round(-109,64,14,10,3,base)}
+// Rear engine deck
+rect(103,-84,101,168,base,P.ink,2.3);line([[103,-29],[204,-29]],P.ink,1.5);line([[103,29],[204,29]],P.ink,1.5);
+for(let yy of [-55,55]){circle(156,yy,25,base,P.ink,2.6);circle(156,yy,20,'#292e29',P.ink,1.5);if(S.lod>=1){ctx.save();ctx.beginPath();ctx.arc(156,yy,19,0,Math.PI*2);ctx.clip();for(let i=-17;i<=17;i+=6){line([[156+i,yy-21],[156+i,yy+21]],P.highlight,.85);line([[135,yy+i],[177,yy+i]],P.highlight,.85)}ctx.restore()}if(S.lod>=3){circle(156,yy,4,P.shadow,P.highlight,1);for(let a=0;a<8;a++){let an=a*Math.PI/4;circle(156+23*Math.cos(an),yy+23*Math.sin(an),1.1,P.ink,null)}}}
+round(121,-17,64,34,6,base,P.ink,2);round(138,-8,31,17,5,base,P.ink,1.5);
+if(S.lod>=2){for(let yy of [-57,57])for(let x of [110,191]){rect(x-6,yy-23,12,46,'#35382e',P.ink,1);for(let j=-19;j<23;j+=5)line([[x-5,yy+j],[x+5,yy+j]],P.highlight,.65)}for(let x of [112,188])circle(x,0,3,P.brown,P.ink,1.1)}
+for(let yy of [-24,24]){rect(210,yy-8,22,13,P.brown,P.ink,2);round(225,yy-7,5,11,1,P.dark,P.ink,1)}
+if(S.lod>=2){for(let sign of [-1,1]){let y=sign*94;line([[-120,y],[20,y-3],[62,y],[90,y+3]],P.dark,5);line([[-120,y-1],[20,y-4],[62,y-1],[90,y+2]],'#8f9790',1.3);for(let x of [-100,-4,53])rect(x,y-7,6,14,P.highlight,P.ink,1.1)}}
+if(S.lod>=2){for(let sign of [-1,1])for(let x=112;x<162;x+=10)round(x,sign*92-7,9,14,2,P.steel,P.ink,1)}
+if(S.lod>=3){for(let x of [-208,-167,-129,95,203])for(let yy of [-89,89])circle(x,yy,1.5,P.ink,null);for(let yy of [-32,32]){circle(199,yy,4,P.highlight,P.ink,1);circle(185,yy,3,P.highlight,P.ink,1)}for(let sign of [-1,1]){let y=sign*98;for(let x of [-150,-138,45,65])circle(x,y,2,'#beb6a0',P.ink,.9)}}
+}
+function turret(){ctx.save();ctx.translate(-19,0);ctx.rotate(rad(S.turret));const base=col(S.paint);
+// Gun points left. Draw behind turret roof
+rect(-258,-7,180,14,base,P.ink,2.6);if(S.paint==='camo'){rect(-195,-6,24,12,P.olive,null);rect(-146,-6,18,12,P.brown,null)}
+round(-270,-12,30,24,4,'#687454',P.ink,2.8);for(let yy of [-6,2])round(-265,yy,8,5,1,'#191e1d',null);
+path([[-90,-19],[-79,-23],[-60,-22],[-60,22],[-80,22],[-90,18]],base,P.ink,2.6);
+path([[-76,-49],[-52,-71],[51,-76],[98,-38],[114,27],[63,72],[-49,67],[-77,44]],base,P.ink,3);camoTurret();
+path([[-75,-49],[-52,-71],[51,-76],[98,-38],[114,27],[63,72],[-49,67],[-77,44]],null,P.ink,2.7);
+path([[-76,-36],[-46,-53],[47,-57],[91,-31]],null,'#312d24',1.5);path([[-77,30],[-45,51],[47,55],[93,24]],null,'#312d24',1.5);
+round(-78,-50,30,100,4,base,P.ink,2.6);if(S.lod>=2){rect(-80,-47,5,94,P.highlight,null);line([[-50,-45],[-50,45]],P.shadow,1.4)}
+round(-33,-44,34,34,7,base,P.ink,2.1);if(S.lod>=2){round(-28,-40,24,26,6,null,P.shadow,1.2);rect(-1,-35,7,13,P.highlight,P.ink,1.2);circle(-25,-39,2.2,P.shadow,null)}
+// cupola
+circle(45,18,29,'#9d8c63',P.ink,2.6);circle(45,18,24,base,P.ink,2.5);circle(45,18,19,base,P.ink,1.8);if(S.lod>=1)for(let a=0;a<8;a++){const ang=a*Math.PI/4;rect(45+23*Math.cos(ang)-3,18+23*Math.sin(ang)-2,6,4,P.highlight,P.ink,.9)}
+if(S.lod>=2){round(19,15,15,7,2,P.highlight,P.ink,1);rect(43,36,5,9,P.dark,P.ink,1.1)}
+if(S.lod>=3){for(let a=0;a<12;a++){const an=a*Math.PI/6;circle(45+27*Math.cos(an),18+27*Math.sin(an),1.2,P.dark,null)}circle(50,12,2,P.ink,null);round(-38,-56,8,8,2,base,P.ink,1.1);round(13,-65,12,7,3,base,P.ink,1.1);for(let x of [-68,-42,60,90])circle(x,x<0?53:-33,1.5,P.ink,null)}
+if(S.axes){line([[-25,0],[27,0]],'#ff6f5a',1.4);line([[0,-26],[0,26]],'#ff6f5a',1.4);circle(0,0,3,'#f5fbf5',null)}
+ctx.restore()}
+function drawGrid(w,h){if(!S.grid)return;ctx.save();ctx.strokeStyle='rgba(208,224,201,.07)';ctx.lineWidth=1;let unit=40*S.zoom/100;for(let x=(w/2+S.offsetX)%unit;x<w;x+=unit){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=(h/2+S.offsetY)%unit;y<h;y+=unit){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}ctx.restore()}
+let CSSW=0,CSSH=0,dpr=1,scale=1;
+function resize(){const rect=viewer.getBoundingClientRect();CSSW=rect.width;CSSH=rect.height;dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.round(CSSW*dpr);canvas.height=Math.round(CSSH*dpr);scale=Math.min(CSSW/620,CSSH/380)*S.zoom/100}
+const observer=new ResizeObserver(resize);observer.observe(viewer);resize();
+function render(t){let dt=t-last;last=t;frames++;if(t-lastFps>500){fps=Math.round(frames*1000/(t-lastFps));frames=0;lastFps=t;el('fps').textContent=fps}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,CSSW,CSSH);drawGrid(CSSW,CSSH);ctx.save();ctx.translate(CSSW/2+S.offsetX,CSSH/2+S.offsetY);ctx.scale(scale,scale);ctx.rotate(rad(S.hull));count=0;body(t);turret();if(S.axes){line([[-17,0],[17,0]],'#ff6f5a',1);line([[0,-17],[0,17]],'#ff6f5a',1);circle(0,0,2,'#f5fbf5',null)}ctx.restore();el('shapeCount').textContent=count;requestAnimationFrame(render)}requestAnimationFrame(render);
+const detailLabels=['0 · Минимальный','1 · Низкий','2 · Средний','3 · Высокий'];
+for(const field of ['lod','turret','hull','zoom'])el(field).addEventListener('input',e=>{S[field]=Number(e.target.value);sync()});
+for(const field of ['paint','track','animate','grid','axes'])el(field).addEventListener('change',e=>{S[field]=e.target.type==='checkbox'?e.target.checked:e.target.value;sync()});
+function sync(){el('lodOut').textContent=detailLabels[S.lod];el('mode').textContent='LOD '+detailLabels[S.lod];el('turretOut').textContent=S.turret+'°';el('hullOut').textContent=S.hull+'°';el('zoomOut').textContent=S.zoom+'%';scale=Math.min(CSSW/620,CSSH/380)*S.zoom/100}
+let drag=null;canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,ox:S.offsetX,oy:S.offsetY};canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(drag){S.offsetX=drag.ox+e.clientX-drag.x;S.offsetY=drag.oy+e.clientY-drag.y}else if(S.track){const box=canvas.getBoundingClientRect();let x=e.clientX-box.left-CSSW/2-S.offsetX,y=e.clientY-box.top-CSSH/2-S.offsetY;const a=(Math.atan2(y,x)*180/Math.PI+180-S.hull+540)%360-180;S.turret=Math.round(a);el('turret').value=S.turret;sync()}});canvas.addEventListener('pointerup',()=>drag=null);canvas.addEventListener('pointercancel',()=>drag=null);
+canvas.addEventListener('wheel',e=>{e.preventDefault();S.zoom=Math.max(35,Math.min(200,S.zoom+(e.deltaY<0?10:-10)));el('zoom').value=S.zoom;sync()},{passive:false});
+el('reset').onclick=()=>{Object.assign(S,{lod:3,turret:0,hull:0,zoom:100,paint:'camo',track:false,animate:true,grid:true,axes:false,offsetX:0,offsetY:0,demo:false});for(const id of ['lod','turret','hull','zoom','paint'])el(id).value=S[id];for(const id of ['track','animate','grid','axes'])el(id).checked=S[id];el('demo').textContent='Демонстрация поворота башни';sync()};
+el('snapshot').onclick=()=>{const a=document.createElement('a');a.download='panther_procedural_lod'+S.lod+'.png';a.href=canvas.toDataURL('image/png');a.click()};
+let demoLast=0;el('demo').onclick=()=>{S.demo=!S.demo;el('demo').textContent=S.demo?'Остановить демонстрацию':'Демонстрация поворота башни';if(S.demo){S.track=false;el('track').checked=false}};
+function demoTick(t){if(S.demo){if(demoLast)S.turret=(S.turret+(t-demoLast)*.025+180)%360-180;el('turret').value=S.turret;sync()}demoLast=t;requestAnimationFrame(demoTick)}requestAnimationFrame(demoTick);sync();
+</script>
+</body>
+</html>
